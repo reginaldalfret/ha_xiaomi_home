@@ -58,6 +58,14 @@ from .miot.miot_spec import MIoTSpecEvent
 from .miot.miot_device import MIoTDevice, MIoTEventEntity
 from .miot.const import DOMAIN
 
+try:
+    from homeassistant.components.event import DoorbellEventType, EventDeviceClass
+    DOORBELL_EVENT_TYPE_RING: str = DoorbellEventType.RING
+    EVENT_DEVICE_CLASS_DOORBELL = EventDeviceClass.DOORBELL
+except (ImportError, AttributeError):
+    DOORBELL_EVENT_TYPE_RING: str = 'ring'
+    EVENT_DEVICE_CLASS_DOORBELL = 'doorbell'
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -87,10 +95,22 @@ class Event(MIoTEventEntity, EventEntity):
         super().__init__(miot_device=miot_device, spec=spec)
         # Set device_class
         self._attr_device_class = spec.device_class
+        if self._attr_device_class == EVENT_DEVICE_CLASS_DOORBELL:
+            event_types = list(self._attr_event_types or [])
+            if DOORBELL_EVENT_TYPE_RING not in event_types:
+                event_types.append(DOORBELL_EVENT_TYPE_RING)
+            self._attr_event_types = event_types
 
     def on_event_occurred(
         self, name: str, arguments: dict[str, Any] | None = None
     ) -> None:
         """An event is occurred."""
         _LOGGER.debug('%s, attributes: %s', name, str(arguments))
+        if (
+            self._attr_device_class == EVENT_DEVICE_CLASS_DOORBELL
+            and DOORBELL_EVENT_TYPE_RING in self._attr_event_types
+        ):
+            self._trigger_event(
+                event_type=DOORBELL_EVENT_TYPE_RING, event_attributes=arguments)
+            return
         self._trigger_event(event_type=name, event_attributes=arguments)
